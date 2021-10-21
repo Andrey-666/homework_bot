@@ -18,21 +18,23 @@ load_dotenv()
 
 PRACTICUM_TOKEN = os.getenv('AUTH_TOKEN')
 
-TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+PRACTICUM_ENDPOINT = (
+    'https://practicum.yandex.ru/api/user_api/homework_statuses/'
+)
 
-TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
-
-headers = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
-
-RETRY_TIME = 600
-
-ENDPOINT = 'https://practicum.yandex.ru/api/user_api/homework_statuses/'
-
-HOMEWORK_STATUSES = {
+PRACTICUM_HOMEWORK_STATUSES = {
     'approved': 'Работа проверена: ревьюеру всё понравилось. Ура!',
     'reviewing': 'Работа взята на проверку ревьюером.',
     'rejected': 'Работа проверена, в ней нашлись ошибки.'
 }
+
+PRACTICUM_HEADERS = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
+
+TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
+
+TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+
+TELEGRAM_RETRY_TIME = 600
 
 
 def get_api_answer(url, current_timestamp):
@@ -41,7 +43,7 @@ def get_api_answer(url, current_timestamp):
     try:
         homework_statuses = requests.get(
             url,
-            headers=headers,
+            headers=PRACTICUM_HEADERS,
             params=payload
         )
         logging.info('Server response')
@@ -51,9 +53,6 @@ def get_api_answer(url, current_timestamp):
     except RequestException:
         logging.error('Invalid response')
         return 'Что-то пошло не так, попробуйте позже'
-    except TypeError:
-        logging.error('Wrong type of variable')
-        return 'Ошибка в получении статуса'
 
 
 def check_response(response):
@@ -66,25 +65,24 @@ def check_response(response):
         raise Exception('Нет такой домашней работы')
     for homework in homeworks:
         status = homework.get('status')
-        if status in HOMEWORK_STATUSES:
+        if status in PRACTICUM_HOMEWORK_STATUSES:
             return homework
         raise Exception('Нет такого статуса')
-    return homeworks
+    return homeworks[0]
 
 
 def parse_status(homework):
     """При изменении статуса анализируем его."""
-    verdict = HOMEWORK_STATUSES[homework.get('status')]
     homework_name = homework.get('homework_name')
     if homework_name is None:
         error_message = 'Homework_name doesnt exist'
         logging.error(error_message)
         return error_message
     try:
-        verdict = HOMEWORK_STATUSES[homework.get('status')]
+        verdict = PRACTICUM_HOMEWORK_STATUSES[homework.get('status')]
     except KeyError:
         logging.error('No such dict key')
-        return 'Ошиббка в получении статуса'
+        return 'Ошибка в получении статуса'
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
@@ -102,7 +100,7 @@ def main():
     """Цикл работы бота."""
     bot = Bot(token=TELEGRAM_TOKEN)
     current_timestamp = int(time.time())
-    url = ENDPOINT
+    url = PRACTICUM_ENDPOINT
     while True:
         logging.debug('Bot is running')
         try:
@@ -115,12 +113,12 @@ def main():
                 for homework in response_result:
                     parsing = parse_status(homework)
                     send_message(bot, parsing)
-            time.sleep(RETRY_TIME)
+            time.sleep(TELEGRAM_RETRY_TIME)
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             logging.error('Failure')
             bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
-            time.sleep(RETRY_TIME)
+            time.sleep(TELEGRAM_RETRY_TIME)
 
 
 if __name__ == '__main__':
