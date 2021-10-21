@@ -68,7 +68,6 @@ def check_response(response):
         if status in PRACTICUM_HOMEWORK_STATUSES:
             return homework
         raise Exception('Нет такого статуса')
-    return homeworks[0]
 
 
 def parse_status(homework):
@@ -78,10 +77,11 @@ def parse_status(homework):
         error_message = 'Homework_name doesnt exist'
         logging.error(error_message)
         return error_message
+    status = homework.get('status')
     try:
-        verdict = PRACTICUM_HOMEWORK_STATUSES[homework.get('status')]
+        verdict = PRACTICUM_HOMEWORK_STATUSES[status]
     except KeyError:
-        logging.error('No such dict key')
+        logging.error(f'No such status: {status}')
         return 'Ошибка в получении статуса'
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
@@ -92,7 +92,7 @@ def send_message(bot, message):
         logging.info(f'Message sent: {message}')
         return bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
     except RequestException:
-        logging.error('Telegram is down')
+        logging.error('Telegram is down', exc_info=True)
         return 'Ошибка на стороне мессенджера'
 
 
@@ -110,9 +110,8 @@ def main():
                     current_timestamp
                 ))
             if response_result:
-                for homework in response_result:
-                    parsing = parse_status(homework)
-                    send_message(bot, parsing)
+                parsing = parse_status(response_result)
+                send_message(bot, parsing)
             time.sleep(TELEGRAM_RETRY_TIME)
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
