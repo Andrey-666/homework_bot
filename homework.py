@@ -3,6 +3,7 @@ import os
 import time
 
 import requests
+from requests.exceptions import RequestException
 from dotenv import load_dotenv
 from telegram import Bot
 
@@ -19,7 +20,9 @@ PRACTICUM_TOKEN = os.getenv('AUTH_TOKEN')
 
 TELEGRAM_TOKEN = os.getenv('TELEGRAM_TOKEN')
 
-CHAT_ID = os.getenv('CHAT_ID')
+TELEGRAM_CHAT_ID = os.getenv('TELEGRAM_CHAT_ID')
+
+headers = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
 
 RETRY_TIME = 600
 
@@ -34,17 +37,23 @@ HOMEWORK_STATUSES = {
 
 def get_api_answer(url, current_timestamp):
     """Отправляем запрос к серверу."""
-    headers = {'Authorization': f'OAuth {PRACTICUM_TOKEN}'}
     payload = {'from_date': current_timestamp}
-    homework_statuses = requests.get(
-        url,
-        headers=headers,
-        params=payload
-    )
-    if homework_statuses.status_code != 200:
-        raise Exception('Ошибка ответа сервера')
-    logging.info('Server response')
-    return homework_statuses.json()
+    try:
+        homework_statuses = requests.get(
+            url,
+            headers=headers,
+            params=payload
+        )
+        logging.info('Server response')
+        if homework_statuses.status_code != 200:
+            raise Exception('Error')
+        return homework_statuses.json()
+    except RequestException:
+        logging.error('Invalid response')
+        return 'Что-то пошло не так, попробуйте позже'
+    except TypeError:
+        logging.error('Wrong type of variable')
+        return 'Ошибка в получении статуса'
 
 
 def check_response(response):
@@ -53,14 +62,13 @@ def check_response(response):
     Проверяем именение статуса.
     """
     homeworks = response.get('homeworks')
-    if homeworks is None:
+    if not homeworks:
         raise Exception('Нет такой домашней работы')
     for homework in homeworks:
         status = homework.get('status')
-        if status in HOMEWORK_STATUSES.keys():
-            return homeworks
-        else:
-            raise Exception('Нет такого статуса')
+        if status in HOMEWORK_STATUSES:
+            return homework
+        raise Exception('Нет такого статуса')
     return homeworks
 
 
@@ -72,17 +80,22 @@ def parse_status(homework):
         error_message = 'Homework_name doesnt exist'
         logging.error(error_message)
         return error_message
-    if verdict is None:
-        error_message = 'Verdict doesnt exist'
-        logging.error(error_message)
-        return error_message
+    try:
+        verdict = HOMEWORK_STATUSES[homework.get('status')]
+    except KeyError:
+        logging.error('No such dict key')
+        return 'Ошиббка в получении статуса'
     return f'Изменился статус проверки работы "{homework_name}". {verdict}'
 
 
 def send_message(bot, message):
     """Отправляем сообщение."""
-    logging.info(f'Message sent: {message}')
-    return bot.send_message(chat_id=CHAT_ID, text=message)
+    try:
+        logging.info(f'Message sent: {message}')
+        return bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
+    except RequestException:
+        logging.error('Telegram is down')
+        return 'Ошибка на стороне мессенджера'
 
 
 def main():
@@ -106,9 +119,8 @@ def main():
         except Exception as error:
             message = f'Сбой в работе программы: {error}'
             logging.error('Failure')
-            bot.send_message(chat_id=CHAT_ID, text=message)
+            bot.send_message(chat_id=TELEGRAM_CHAT_ID, text=message)
             time.sleep(RETRY_TIME)
-            continue
 
 
 if __name__ == '__main__':
