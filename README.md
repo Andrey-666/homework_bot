@@ -3,8 +3,8 @@
 
 ## Стек технологий:
 
--Python 3
--python-telegram-bot
+- Python 3
+- python-telegram-bot
 
 ## Как запустить проект:
 - Клонируйте репозиторий:  
